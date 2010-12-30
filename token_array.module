@@ -1,0 +1,225 @@
+<?php
+// $Id: token_array.module,v 1.1.2.3 2010/12/28 13:45:23 itangalo Exp $
+
+/**
+ * @file
+ * Provides token for multiple-value fields and taxonomy terms.
+ *
+ * This file contains token lists and token values for two types of multiple
+ * node values – CCK fields and taxonomy terms. It also contains a few small
+ * helper functions.
+ *
+ * Note that this is an experimental module, built by an inexpererienced coder.
+ * Feel free to use, find bugs and help making it into something really useful.
+ * Contact at http://drupal.org/user/153998 or http://nodeone.se/johan-falk.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function token_array_menu() {
+  $items['admin/settings/token_array'] = array(
+    'title' => t('Array token settings'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('token_array_settings_form'),
+    'file' => 'token_array.admin.inc',
+    'access arguments' => array('administer site configuration'),
+  );
+  return $items;
+}
+
+/**
+ * Function defining the array merge styles.
+ *
+ * I'd rather have the merge styles configurable on an administration page,
+ * but until I've learned how to do that a definition in code will have to do.
+ *
+ * @return array
+ *   The function returns a keyed array. The key name is the name of the merge
+ *   settings. Its value is another array, with values for 'prefix', 'suffix'
+ *   and 'infix', used when merging array parts to a token.
+ */
+function token_array_merge_styles() {
+  return variable_get('token_array_settings',
+    array(
+      'default' => array(
+        'name' => 'Default',
+        'prefix' => '',
+        'suffix' => '',
+        'infix' => ', ',
+      ),
+      'or' => array(
+        'name' => 'Or',
+        'prefix' => '',
+        'suffix' => '',
+        'infix' => ' OR ',
+      ),
+    )
+  );
+}
+
+/**
+ * Helper function that provides field keys used to build tokens
+ *
+ * Returns an empty array if the field is not set to handle multiple values.
+ * Otherwise, it returns an array with all key values that should be used
+ * to build tokens. Usually this is only 'view' (the field rendered value),
+ * but for some fields there are additional keys as well. In the future, it
+ * would be nice to have this extendable by other modules themselves.
+ *
+ * @param $field
+ *    The field object that is investigated for keys
+ * @return array
+ *    An array with all field keys used to build the array token
+ */
+function token_array_get_field_keys($field) {
+  if ($field['multiple'] == 0) {
+    return array();
+  }
+
+  $keys = array('view');
+  $additional_keys = array(
+    'filefield' => 'fid',
+    'nodereference' => 'nid',
+    'userreference' => 'uid',
+  );
+
+  if (isset($additional_keys[$field['type']])) {
+    $keys[] = $additional_keys[$field['type']];
+  }
+
+  return $keys;
+}
+
+/**
+ * Implementation of hook_token_values().
+ */
+function token_array_token_values($type, $object = NULL) {
+  $tokens = array();
+
+  if ($type == 'node') {
+    // Prevent against invalid 'nodes' built by broken 3rd party code.
+    if (isset($node->type)) {
+      $node = drupal_clone($object);
+      $type = content_types($node->type);
+
+      // The following lines are only necessary when building CCK tokens
+      if (module_exists('content')) {
+        $node->build_mode = 'token';
+        $node->content = array();
+        content_view($node);
+        // The formatted values will only be known after the content has been rendered.
+        drupal_render($node->content);
+        content_alter($node);
+      }
+
+      // Loop through each defined merge style
+      foreach (token_array_merge_styles() as $machine_name => $merge_style) {
+
+        // Build tokens for CCK fields
+        if (module_exists('content')) {
+          $field_types = _content_field_types();
+
+          // Loop through each field in this node type
+          foreach ($type['fields'] as $field) {
+            // Loop through each field key that should be used to build array tokens
+            foreach (token_array_get_field_keys($field) as $field_key) {
+
+              // Add each field value to a temporary array,
+              // formatted according to the merge style
+              $list = array();
+              foreach ($node->{$field['field_name']} as $item) {
+                $list[] = $merge_style['prefix'] . $item[$field_key] . $merge_style['suffix'];
+              }
+
+              // Implode the values for this field and add it to the tokens,
+              // formatted according to the merge style
+              $tokens[$field['field_name'] . '-' . $machine_name . '-array-' . $field_key]
+                = implode($merge_style['infix'], $list);
+            }
+          }
+        }
+
+        // Build tokens for taxonomy terms
+
+        // Loop through each vocabulary relevant for this node type
+        if (module_exists('taxonomy')) {
+          foreach (taxonomy_get_vocabularies($node->type) as $vocabulary) {
+            // Only apply for vocabularies with multiple values or tagging enabled
+            if (($vocabulary->multiple == 1) || ($vocabulary->tags == 1)) {
+              $list = array();
+              // Add the name of each node term for this vocabulary to a temporary
+              // list, formatted according to the merge style.
+              // Note that term names may contain all sorts of ugly scripts, so they
+              // are cleaned before added.
+              foreach (taxonomy_node_get_terms_by_vocabulary($node, $vocabulary->vid) as $term) {
+                $list[] = $merge_style['prefix'] . check_plain($term->name) . $merge_style['suffix'];
+              }
+              // Implode the list and add it as a token, formatted according to the
+              // merge style. The entire list is deliberately not cleaned of any
+              // code, since there may markup in prefix and suffix.
+              $tokens['terms-' . $vocabulary->vid . '-' . $machine_name . '-array']
+                = implode($merge_style['infix'], $list);
+            }
+          }
+        }
+      }
+    }
+  }
+  return $tokens;
+}
+
+/**
+ * Implementation of hook_token_list().
+ */
+function token_array_token_list($type = 'all') {
+  if ($type == 'node' || $type == 'all') {
+    $list = array();
+
+    // Loop through each defined merge style
+    foreach (token_array_merge_styles() as $machine_name => $merge_style) {
+
+      // Build token list for each CCK field
+      if (module_exists('content')) {
+        $field_types = _content_field_types();
+
+        foreach (content_fields() as $field) {
+
+          // Loop through each field key that could be used to build array tokens
+          foreach (token_array_get_field_keys($field) as $field_key) {
+
+            // The complex thing here is the key – the defining name of the token
+            $list['CCK array'][$field['field_name'] . '-' . $machine_name . '-array-' . $field_key] =
+              t('@field_key values of field %field merged with style %name',
+                array('@field_key' => $field_key, '%field' => $field['field_name'], '%name' => t($merge_style['name'])));
+          }
+        }
+      }
+
+      // Build token list for each vocabulary
+      if (module_exists('taxonomy')) {
+        foreach (taxonomy_get_vocabularies() as $vocabulary) {
+
+          // Only apply for vocabularies with multiple values or tagging enabled
+          if (($vocabulary->multiple == 1) || ($vocabulary->tags == 1)) {
+            // Vocabulary ID is used rather than vocabulary name, since the name
+            // may change (and then break any tokens entered on the site). Plus,
+            // it is shorter to type. :-)
+            $list['taxonomy array']['terms-' . $vocabulary->vid . '-' . $machine_name . '-array']
+              = t('Term names in vocabulary %vocab_name merged with style %name',
+                array('%vocab_name' => $vocabulary->name, '%name' => t($merge_style['name'])));
+          }
+        }
+      }
+    }
+
+    return $list;
+  }
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function token_array_uninstall() {
+  variable_del('token_array_settings');
+}

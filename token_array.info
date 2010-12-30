@@ -1,0 +1,12 @@
+; $Id: token_array.info,v 1.1.2.2 2010/12/28 13:45:23 itangalo Exp $
+name = "Array Tokens"
+description = "An extension to the Token module, providing tokens for multiple-value CCK fields and taxonomy terms."
+dependencies[] = "token"
+package = "Other"
+core = "6.x"
+; Information added by drupal.org packaging script on 2010-12-28
+version = "6.x-1.2-beta5"
+core = "6.x"
+project = "token_array"
+datestamp = "1293544296"
+
