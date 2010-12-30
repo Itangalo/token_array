@@ -1,5 +1,5 @@
 <?php
-// $Id: token_array.module,v 1.2 2010/11/24 17:13:47 itangalo Exp $
+// $Id: token_array.module,v 1.1.2.4 2010/12/30 09:25:18 itangalo Exp $
 
 /**
  * @file
@@ -98,7 +98,7 @@ function token_array_token_values($type, $object = NULL) {
 
   // Prevent against invalid 'nodes' built by broken 3rd party code.
   if ($type == 'node' && isset($object->type)) {
-    $node = $object;
+    $node = drupal_clone($object);
 
     // Get vocabularies & terms beforehand (so we don't call
     // taxonomy_node_get_terms_by_vocabulary() repeatedly for each merge style)

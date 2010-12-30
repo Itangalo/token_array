@@ -1,5 +1,5 @@
 <?php
-// $Id: token_array.admin.inc,v 1.2 2010/11/24 17:13:47 itangalo Exp $
+// $Id: token_array.admin.inc,v 1.1.2.2 2010/12/30 09:25:18 itangalo Exp $
 
 /**
  * @file

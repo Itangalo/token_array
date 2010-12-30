@@ -1,4 +1,4 @@
-// $Id: README.txt,v 1.2 2010/11/24 17:13:47 itangalo Exp $
+// $Id: README.txt,v 1.1.2.2 2010/12/30 09:25:18 itangalo Exp $
 
 The Array Tokens module allows you to use all values in multiple-value CCK
 fields and multiple-value taxonomy terms in a single token, like this:
