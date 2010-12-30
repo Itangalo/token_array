@@ -1,5 +1,5 @@
 <?php
-// $Id: token_array.module,v 1.1.2.4 2010/12/30 09:25:18 itangalo Exp $
+// $Id$
 
 /**
  * @file
@@ -197,7 +197,7 @@ function token_array_token_list($type = 'all') {
           // Loop through each field key that could be used to build array tokens
           foreach (token_array_get_field_keys($field) as $field_key) {
 
-            // The complex thing here is the key – the defining name of the token
+            // The complex thing here is the key� the defining name of the token
             $list['CCK array'][$field['field_name'] . '-' . $machine_name . '-array-' . $field_key] =
               t('@field_key values of field %field merged with style %name',
                 array('@field_key' => $field_key, '%field' => $field['field_name'], '%name' => t($merge_style['name'])));
