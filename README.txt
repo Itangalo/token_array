@@ -1,4 +1,4 @@
-// $Id: README.txt,v 1.1.2.1 2010/11/19 09:09:31 itangalo Exp $
+// $Id: README.txt,v 1.2 2010/11/24 17:13:47 itangalo Exp $
 
 The Array Tokens module allows you to use all values in multiple-value CCK
 fields and multiple-value taxonomy terms in a single token, like this:
@@ -70,17 +70,3 @@ documentation, translations, patches, ports to Drupal 7 or just general cheering
 and hand clapping is always welcome.
 
 Go to http://drupal.org/project/token_array to find out more.
-
-
-ARRAY TOKENS AND PERFORMANCE
-----------------------------
-
-On each token list display, Array Tokens iterates through all CCK fields and
-taxonomy vocabularies. On each build of token replacements, Array Tokens
-iterates through all the CCK fields and taxonomy vocabularies for the given
-node type.
-If you have a very large number of CCK fields or taxonomy vocabularies (50+),
-Array Tokens may have some impact on your site performance. However, the
-iteration is quicker than the standard CCK tokens (included in Token core) –
-meaning that if you experience problems they are more likely caused by Token
-module than Array Tokens.

@@ -1,5 +1,5 @@
 <?php
-// $Id: token_array.admin.inc,v 1.1.2.1 2010/11/19 09:09:31 itangalo Exp $
+// $Id: token_array.admin.inc,v 1.2 2010/11/24 17:13:47 itangalo Exp $
 
 /**
  * @file
@@ -97,7 +97,7 @@ function token_array_settings_form() {
   );
   $form['reset'] = array(
     '#type' => 'submit',
-    '#value' => t('Reset to default'),
+    '#value' => t('Reset to defaults'),
     '#name' => 'reset',
     '#submit' => array('token_array_reset'),
   );

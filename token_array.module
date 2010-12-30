@@ -1,5 +1,5 @@
 <?php
-// $Id: token_array.module,v 1.1.2.1 2010/11/19 09:09:31 itangalo Exp $
+// $Id: token_array.module,v 1.2 2010/11/24 17:13:47 itangalo Exp $
 
 /**
  * @file
@@ -29,15 +29,12 @@ function token_array_menu() {
 }
 
 /**
- * Function defining the array merge styles.
- *
- * I'd rather have the merge styles configurable on an administration page,
- * but until I've learned how to do that a definition in code will have to do.
+ * Function defining the default array merge styles.
  *
  * @return array
  *   The function returns a keyed array. The key name is the name of the merge
- *   settings. Its value is another array, with values for 'prefix', 'suffix'
- *   and 'infix', used when merging array parts to a token.
+ *   settings. Its value is another array, with values for 'name', 'prefix',
+ *   'suffix' and 'infix', used when merging array parts to a token.
  */
 function token_array_merge_styles() {
   return variable_get('token_array_settings',
@@ -73,17 +70,19 @@ function token_array_merge_styles() {
  *    An array with all field keys used to build the array token
  */
 function token_array_get_field_keys($field) {
+  // Return blank if the field cannot hold multiple values.
   if ($field['multiple'] == 0) {
     return array();
   }
 
+  // Add standard key 'view' and any additional fields
   $keys = array('view');
+
   $additional_keys = array(
     'filefield' => 'fid',
     'nodereference' => 'nid',
     'userreference' => 'uid',
   );
-
   if (isset($additional_keys[$field['type']])) {
     $keys[] = $additional_keys[$field['type']];
   }
@@ -97,11 +96,21 @@ function token_array_get_field_keys($field) {
 function token_array_token_values($type, $object = NULL) {
   $tokens = array();
 
-  if ($type == 'node') {
+  // Prevent against invalid 'nodes' built by broken 3rd party code.
+  if ($type == 'node' && isset($object->type)) {
     $node = $object;
-    // Prevent against invalid 'nodes' built by broken 3rd party code.
-    if (isset($node->type)) {
-      $type = content_types($node->type);
+
+    // Get vocabularies & terms beforehand (so we don't call
+    // taxonomy_node_get_terms_by_vocabulary() repeatedly for each merge style)
+    $terms_by_vid = array();
+    foreach (_token_array_vocabs($node->type) as $vid) {
+      $term_names = array();
+
+      foreach (taxonomy_node_get_terms_by_vocabulary($node, $vid) as $term) {
+        $term_names[] = check_plain($term->name);
+      }
+      $terms_by_vid[$vid] = $term_names;
+    }
 
       // The following lines are only necessary when building CCK tokens
       if (module_exists('content')) {
@@ -111,6 +120,8 @@ function token_array_token_values($type, $object = NULL) {
         // The formatted values will only be known after the content has been rendered.
         drupal_render($node->content);
         content_alter($node);
+
+      $type = content_types($node->type);
       }
 
       // Loop through each defined merge style
@@ -118,7 +129,6 @@ function token_array_token_values($type, $object = NULL) {
 
         // Build tokens for CCK fields
         if (module_exists('content')) {
-          $field_types = _content_field_types();
 
           // Loop through each field in this node type
           foreach ($type['fields'] as $field) {
@@ -128,8 +138,10 @@ function token_array_token_values($type, $object = NULL) {
               // Add each field value to a temporary array,
               // formatted according to the merge style
               $list = array();
-              foreach ($node->{$field['field_name']} as $item) {
-                $list[] = $merge_style['prefix'] . $item[$field_key] . $merge_style['suffix'];
+              if (isset($node->{$field['field_name']})) {
+                foreach ($node->{$field['field_name']} as $item) {
+                  $list[] = $merge_style['prefix'] . $item[$field_key] . $merge_style['suffix'];
+                }
               }
 
               // Implode the values for this field and add it to the tokens,
@@ -143,26 +155,20 @@ function token_array_token_values($type, $object = NULL) {
         // Build tokens for taxonomy terms
 
         // Loop through each vocabulary relevant for this node type
-        if (module_exists('taxonomy')) {
-          foreach (taxonomy_get_vocabularies($node->type) as $vocabulary) {
-            // Only apply for vocabularies with multiple values or tagging enabled
-            if (($vocabulary->multiple == 1) || ($vocabulary->tags == 1)) {
-              $list = array();
-              // Add the name of each node term for this vocabulary to a temporary
-              // list, formatted according to the merge style.
-              // Note that term names may contain all sorts of ugly scripts, so they
-              // are cleaned before added.
-              foreach (taxonomy_node_get_terms_by_vocabulary($node, $vocabulary->vid) as $term) {
-                $list[] = $merge_style['prefix'] . check_plain($term->name) . $merge_style['suffix'];
-              }
-              // Implode the list and add it as a token, formatted according to the
-              // merge style. The entire list is deliberately not cleaned of any
-              // code, since there may markup in prefix and suffix.
-              $tokens['terms-' . $vocabulary->vid . '-' . $machine_name . '-array']
-                = implode($merge_style['infix'], $list);
-            }
-          }
+      foreach ($terms_by_vid as $vid => $term_names) {
+        $list = array();
+        // Add the name of each node term for this vocabulary to a temporary
+        // list, formatted according to the merge style.
+        // Note that term names may contain all sorts of ugly scripts, so they
+        // are cleaned before added.
+        foreach ($term_names as $term) {
+          $list[] = $merge_style['prefix'] . $term . $merge_style['suffix'];
         }
+        // Implode the list and add it as a token, formatted according to the
+        // merge style. The entire list is deliberately not cleaned of any
+        // code, since there may be markup in prefix and suffix.
+        $tokens['terms-' . $vid . '-' . $machine_name . '-array']
+          = implode($merge_style['infix'], $list);
       }
     }
   }
@@ -175,13 +181,16 @@ function token_array_token_values($type, $object = NULL) {
 function token_array_token_list($type = 'all') {
   if ($type == 'node' || $type == 'all') {
     $list = array();
+    $vocabularies = array();
+    if (module_exists('taxonomy')) {
+      $vocabularies = taxonomy_get_vocabularies();
+    }
 
     // Loop through each defined merge style
     foreach (token_array_merge_styles() as $machine_name => $merge_style) {
 
       // Build token list for each CCK field
       if (module_exists('content')) {
-        $field_types = _content_field_types();
 
         foreach (content_fields() as $field) {
 
@@ -197,24 +206,46 @@ function token_array_token_list($type = 'all') {
       }
 
       // Build token list for each vocabulary
-      if (module_exists('taxonomy')) {
-        foreach (taxonomy_get_vocabularies() as $vocabulary) {
+      foreach ($vocabularies as $vocabulary) {
 
-          // Only apply for vocabularies with multiple values or tagging enabled
-          if (($vocabulary->multiple == 1) || ($vocabulary->tags == 1)) {
-            // Vocabulary ID is used rather than vocabulary name, since the name
-            // may change (and then break any tokens entered on the site). Plus,
-            // it is shorter to type. :-)
-            $list['taxonomy array']['terms-' . $vocabulary->vid . '-' . $machine_name . '-array']
-              = t('Term names in vocabulary %vocab_name merged with style %name',
-                array('%vocab_name' => $vocabulary->name, '%name' => t($merge_style['name'])));
-          }
+        // Only apply for vocabularies with multiple values or tagging enabled
+        if (($vocabulary->multiple == 1) || ($vocabulary->tags == 1)) {
+          // Vocabulary ID is used rather than vocabulary name, since the name
+          // may change (and then break any tokens entered on the site). Plus,
+          // it is shorter to type. :-)
+          $list['taxonomy array']['terms-' . $vocabulary->vid . '-' . $machine_name . '-array']
+            = t('Term names in vocabulary %vocab_name merged with style %name',
+              array('%vocab_name' => $vocabulary->name, '%name' => t($merge_style['name'])));
         }
       }
     }
 
     return $list;
   }
+}
+
+/**
+ * Wrapper around taxonomy_get_vocabularies() which caches results.
+ * (There can be many calls to token_array_token_values() per page view.)
+ */
+function _token_array_vocabs($type) {
+  static $vids;
+
+  if (!isset($vids[$type])) {
+    $cache = array();
+    if (module_exists('taxonomy')) {
+      foreach (taxonomy_get_vocabularies($type) as $vocabulary) {
+
+        // Only use vocabularies with multiple values or tagging enabled
+        if ($vocabulary->multiple == 1 || $vocabulary->tags == 1) {
+          $cache[] = $vocabulary->vid;
+        }
+      }
+    }
+    $vids[$type] = $cache;
+  }
+
+  return $vids[$type];
 }
 
 /**
