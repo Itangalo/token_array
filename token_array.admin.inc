@@ -1,5 +1,5 @@
 <?php
-// $Id: token_array.admin.inc,v 1.1 2010/11/16 14:42:35 itangalo Exp $
+// $Id: token_array.admin.inc,v 1.1.2.1 2010/11/19 09:09:31 itangalo Exp $
 
 /**
  * @file
@@ -10,6 +10,14 @@
  * Form builder function for module settings.
  */
 function token_array_settings_form() {
+  // If neither CCK nor Taxonomy module is enabled, display a warning that tells
+  // the user that Array Tokens won't do any good.
+  if (!module_exists('content') && !module_exists('taxonomy')) {
+    drupal_set_message(t('Array Tokens are only useful if your site has
+      multiple-value CCK fields or taxonomy vocabularies. Please enable Content
+      or Taxonomy module to make use of the settings below.'), 'warning');
+  }
+
 
   // Get stored values, or default ones
   $merge_styles = variable_get('token_array_settings', token_array_merge_styles());
@@ -43,40 +51,40 @@ function token_array_settings_form() {
     $example[] = $merge_style['prefix'] . $example_item . $merge_style['suffix'];
   }
 
-  foreach ($merge_styles as $style_name => $merge_style) {
-    $form[$style_name] = array(
+  foreach ($merge_styles as $machine_name => $merge_style) {
+    $form[$machine_name] = array(
       '#type' => 'fieldset',
-      '#title' => t('Merge style: @style_name (@machine_name)', array('@style_name' => $merge_style['name'], '@machine_name' => $style_name)),
-      '#name' => $style_name . '-fieldset',
+      '#title' => t('Merge style: @style_name (@machine_name)', array('@style_name' => t($merge_style['name']), '@machine_name' => $machine_name)),
+      '#name' => $machine_name . '-fieldset',
       '#tree' => TRUE,
       '#description' => t('Example token output: !example',
       array('!example' => implode($merge_style['infix'], $example))),
     );
 
     foreach ($merge_style as $property => $value) {
-      $form[$style_name][$property] = array(
+      $form[$machine_name][$property] = array(
         '#type' => 'textfield',
         '#title' => t($property),
         '#value' => $value,
         '#description' => $descriptions[$property],
-        '#name' => $style_name . '-' . $property,
+        '#name' => $machine_name . '-' . $property,
         '#tree' => TRUE,
       );
     }
 
     // Add a save button for each merge style
-    $form[$style_name]['save'] = array(
+    $form[$machine_name]['save'] = array(
       '#type' => 'submit',
-      '#value' => t('Save style \'@style_name\'', array('@style_name' => $merge_style['name'])),
+      '#value' => t('Save style \'@style_name\'', array('@style_name' => t($merge_style['name']))),
       '#submit' => array('token_array_save'),
-      '#name' => $style_name . '-save',
+      '#name' => $machine_name . '-save',
     );
     // Add a delete button for each merge style
-    $form[$style_name]['delete'] = array(
+    $form[$machine_name]['delete'] = array(
       '#type' => 'submit',
-      '#value' => t('Delete style \'@style_name\'', array('@style_name' => $merge_style['name'])),
+      '#value' => t('Delete style \'@style_name\'', array('@style_name' => t($merge_style['name']))),
       '#submit' => array('token_array_delete'),
-      '#name' => $style_name,
+      '#name' => $machine_name,
     );
 
   }
@@ -133,10 +141,10 @@ function token_array_settings_form() {
 function token_array_settings_form_submit($form, $form_state) {
   // Get the previous settings
   $merge_styles = variable_get('token_array_settings', token_array_merge_styles());
-  foreach ($merge_styles as $style_name => $merge_style) {
+  foreach ($merge_styles as $machine_name => $merge_style) {
     foreach ($merge_style as $property => $vaule) {
       // Change each style according to posted data
-      $new_styles[$style_name][$property] = $form['#post'][$style_name . '-' . $property];
+      $new_styles[$machine_name][$property] = $form['#post'][$machine_name . '-' . $property];
     }
   }
 
@@ -149,11 +157,11 @@ function token_array_settings_form_submit($form, $form_state) {
 function token_array_save($form, $form_state) {
   // Get the previous settings
   $merge_styles = variable_get('token_array_settings', token_array_merge_styles());
-  foreach ($merge_styles as $style_name => $merge_style) {
-    if ($form_state['clicked_button']['#name'] == $style_name . '-save') {
+  foreach ($merge_styles as $machine_name => $merge_style) {
+    if ($form_state['clicked_button']['#name'] == $machine_name . '-save') {
       foreach ($merge_style as $property => $vaule) {
         // Change each style according to posted data
-        $merge_styles[$style_name][$property] = $form['#post'][$style_name . '-' . $property];
+        $merge_styles[$machine_name][$property] = $form['#post'][$machine_name . '-' . $property];
       }
     }
   }
@@ -180,8 +188,6 @@ function token_array_delete($form, $form_state) {
 function token_array_add_style($form, $form_state) {
 
   $machine_name = $form_state['clicked_button']['#post']['add-machine_name'];
-
-  dpm(array($machine_name, $form_state));
 
   // Check that the machine name is actually set
   if (strlen($machine_name) < 1) {
